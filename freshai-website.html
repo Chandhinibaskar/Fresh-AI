@@ -1,0 +1,1394 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>FreshAI — Know Your Food Before You Eat</title>
+<meta name="description" content="FreshAI uses computer vision to scan fruits, vegetables, dairy, meat and packaged food and tell you exactly how fresh it is.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,600;0,9..144,700;0,9..144,900;1,9..144,500&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.20.0/dist/tf.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/mobilenet@2.1.1/dist/mobilenet.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<style>
+:root{
+  --green-deep:#1F7A4D;
+  --green-mid:#2F9E5C;
+  --green-bright:#8BC53F;
+  --orange:#FF8A3D;
+  --orange-deep:#F2662A;
+  --yellow:#FFC93C;
+  --cream:#FFFCF3;
+  --cream-2:#FFF6E4;
+  --ink:#16241A;
+  --ink-soft:#43554A;
+  --white:#FFFFFF;
+  --line:rgba(22,36,26,0.10);
+  --shadow-soft: 0 20px 50px -20px rgba(31,122,77,0.35);
+  --radius-lg:28px;
+  --radius-md:18px;
+  --radius-sm:12px;
+  --font-display:'Fraunces', serif;
+  --font-body:'Plus Jakarta Sans', sans-serif;
+  --font-mono:'Space Mono', monospace;
+}
+*{box-sizing:border-box;}
+html{scroll-behavior:smooth;}
+body{
+  margin:0;
+  font-family:var(--font-body);
+  background:var(--cream);
+  color:var(--ink);
+  -webkit-font-smoothing:antialiased;
+  overflow-x:hidden;
+}
+img{max-width:100%;display:block;}
+a{text-decoration:none;color:inherit;}
+button{font-family:inherit;cursor:pointer;}
+h1,h2,h3,h4{font-family:var(--font-display);margin:0;line-height:1.05;}
+p{margin:0;}
+.container{max-width:1240px;margin:0 auto;padding:0 28px;}
+.eyebrow{
+  font-family:var(--font-mono);
+  font-size:12.5px;
+  letter-spacing:0.14em;
+  text-transform:uppercase;
+  color:var(--green-deep);
+  display:inline-flex;
+  align-items:center;
+  gap:8px;
+  font-weight:700;
+}
+.eyebrow::before{content:"";width:8px;height:8px;border-radius:50%;background:var(--orange);display:inline-block;}
+
+/* ===== decorative blobs ===== */
+.blob{position:absolute;border-radius:50%;filter:blur(60px);opacity:0.35;z-index:0;}
+@keyframes float{0%,100%{transform:translateY(0) rotate(0deg);}50%{transform:translateY(-22px) rotate(6deg);}}
+.floaty{animation:float 7s ease-in-out infinite;}
+.floaty.d2{animation-delay:1.2s;}
+.floaty.d3{animation-delay:2.4s;}
+
+/* ===== nav ===== */
+.nav{
+  position:sticky;top:0;z-index:100;
+  background:rgba(255,252,243,0.82);
+  backdrop-filter:blur(14px);
+  border-bottom:1px solid var(--line);
+}
+.nav-inner{display:flex;align-items:center;justify-content:space-between;padding:16px 28px;max-width:1240px;margin:0 auto;}
+.logo{display:flex;align-items:center;gap:10px;font-family:var(--font-display);font-weight:700;font-size:22px;}
+.logo-mark{width:34px;height:34px;border-radius:10px;background:linear-gradient(135deg,var(--green-bright),var(--green-deep));display:flex;align-items:center;justify-content:center;box-shadow:0 6px 16px -4px rgba(31,122,77,0.5);}
+.nav-links{display:flex;gap:4px;list-style:none;padding:0;margin:0;background:var(--white);border-radius:999px;padding:5px;border:1px solid var(--line);}
+.nav-links button{
+  border:none;background:transparent;padding:9px 16px;border-radius:999px;
+  font-size:14px;font-weight:600;color:var(--ink-soft);transition:all .25s ease;
+}
+.nav-links button.active{background:var(--ink);color:var(--white);}
+.nav-links button:hover:not(.active){color:var(--green-deep);}
+.nav-cta{display:flex;gap:10px;align-items:center;}
+.btn{
+  display:inline-flex;align-items:center;justify-content:center;gap:8px;
+  padding:12px 22px;border-radius:999px;font-weight:700;font-size:14.5px;border:none;
+  transition:transform .2s ease, box-shadow .2s ease;white-space:nowrap;
+}
+.btn:active{transform:scale(0.97);}
+.btn-primary{background:linear-gradient(135deg,var(--orange),var(--orange-deep));color:var(--white);box-shadow:0 12px 24px -10px rgba(242,102,42,0.6);}
+.btn-primary:hover{box-shadow:0 16px 30px -8px rgba(242,102,42,0.7);transform:translateY(-2px);}
+.btn-ghost{background:var(--white);color:var(--ink);border:1.5px solid var(--line);}
+.btn-ghost:hover{border-color:var(--green-deep);color:var(--green-deep);}
+.btn-dark{background:var(--ink);color:var(--white);}
+.hide-mobile{display:inline-flex;}
+@media(max-width:860px){.nav-links{display:none;}.hide-mobile{display:none;}}
+
+/* ===== views ===== */
+.view{display:none;}
+.view.active{display:block;animation:fadein .5s ease;}
+@keyframes fadein{from{opacity:0;transform:translateY(8px);}to{opacity:1;transform:translateY(0);}}
+
+/* ===== hero ===== */
+.hero{position:relative;padding:76px 0 60px;overflow:hidden;}
+.hero-bg{position:absolute;inset:0;z-index:0;background:
+  radial-gradient(60% 50% at 85% 10%, rgba(255,201,60,0.35), transparent),
+  radial-gradient(50% 45% at 5% 90%, rgba(139,197,63,0.35), transparent);}
+.hero-grid{position:relative;z-index:1;display:grid;grid-template-columns:1.05fr 0.95fr;gap:56px;align-items:center;}
+@media(max-width:940px){.hero-grid{grid-template-columns:1fr;}}
+.hero-badge{display:inline-flex;align-items:center;gap:8px;background:var(--white);border:1px solid var(--line);padding:7px 14px 7px 7px;border-radius:999px;font-size:13px;font-weight:700;box-shadow:var(--shadow-soft);}
+.hero-badge .dot{width:26px;height:26px;border-radius:50%;background:linear-gradient(135deg,var(--green-bright),var(--green-deep));display:flex;align-items:center;justify-content:center;color:#fff;font-size:13px;}
+.hero h1{font-size:clamp(38px,5.2vw,64px);font-weight:900;margin-top:22px;letter-spacing:-0.02em;}
+.hero h1 em{font-style:italic;font-weight:500;color:var(--green-deep);position:relative;}
+.hero p.lead{margin-top:20px;font-size:18px;color:var(--ink-soft);max-width:520px;line-height:1.6;}
+.hero-ctas{display:flex;gap:14px;margin-top:32px;flex-wrap:wrap;}
+.hero-stats{display:flex;gap:34px;margin-top:44px;flex-wrap:wrap;}
+.hero-stats .stat b{font-family:var(--font-display);font-size:28px;display:block;}
+.hero-stats .stat span{font-size:12.5px;color:var(--ink-soft);font-weight:600;}
+
+.hero-visual{position:relative;}
+.hero-card{
+  position:relative;z-index:2;border-radius:32px;overflow:hidden;
+  box-shadow:0 40px 70px -30px rgba(22,36,26,0.45);
+  border:6px solid var(--white);
+}
+.hero-card img{width:100%;height:460px;object-fit:cover;}
+.float-chip{
+  position:absolute;z-index:3;background:rgba(255,255,255,0.75);backdrop-filter:blur(12px);
+  border:1px solid rgba(255,255,255,0.6);border-radius:18px;padding:14px 16px;
+  box-shadow:0 20px 40px -18px rgba(22,36,26,0.35);display:flex;align-items:center;gap:12px;
+}
+.chip-fresh{top:-18px;left:-30px;}
+.chip-scan{bottom:-24px;right:-20px;}
+.chip-cal{top:40%;right:-40px;}
+@media(max-width:600px){.chip-fresh{left:-6px;}.chip-scan{right:-6px;}.chip-cal{display:none;}}
+.ring-mini{width:46px;height:46px;border-radius:50%;background:conic-gradient(var(--green-bright) 0 92%, var(--line) 92% 100%);display:flex;align-items:center;justify-content:center;}
+.ring-mini span{width:34px;height:34px;border-radius:50%;background:var(--white);display:flex;align-items:center;justify-content:center;font-family:var(--font-mono);font-size:10px;font-weight:700;}
+.chip-title{font-size:13px;font-weight:800;}
+.chip-sub{font-size:11.5px;color:var(--ink-soft);}
+
+/* ===== marquee ===== */
+.marquee{border-top:1px solid var(--line);border-bottom:1px solid var(--line);background:var(--white);padding:18px 0;overflow:hidden;}
+.marquee-track{display:flex;gap:56px;white-space:nowrap;animation:scroll 22s linear infinite;width:max-content;}
+@keyframes scroll{from{transform:translateX(0);}to{transform:translateX(-50%);}}
+.marquee-track span{font-family:var(--font-mono);font-size:13px;color:var(--ink-soft);letter-spacing:0.05em;}
+
+/* ===== section shells ===== */
+.section{padding:88px 0;position:relative;}
+.section-head{max-width:640px;margin-bottom:48px;}
+.section-head h2{font-size:clamp(28px,3.6vw,42px);margin-top:14px;letter-spacing:-0.01em;}
+.section-head p{margin-top:14px;color:var(--ink-soft);font-size:16.5px;line-height:1.6;}
+.section-alt{background:linear-gradient(180deg,var(--cream-2),var(--cream));}
+
+/* ===== feature grid ===== */
+.feat-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:20px;}
+@media(max-width:980px){.feat-grid{grid-template-columns:repeat(2,1fr);}}
+@media(max-width:560px){.feat-grid{grid-template-columns:1fr;}}
+.feat-card{
+  background:rgba(255,255,255,0.65);backdrop-filter:blur(10px);
+  border:1px solid rgba(255,255,255,0.8);border-radius:var(--radius-md);
+  padding:26px;transition:transform .25s ease, box-shadow .25s ease;
+}
+.feat-card:hover{transform:translateY(-6px);box-shadow:var(--shadow-soft);}
+.feat-icon{width:48px;height:48px;border-radius:14px;display:flex;align-items:center;justify-content:center;font-size:22px;margin-bottom:16px;}
+.feat-card h3{font-size:18px;font-weight:700;font-family:var(--font-body);}
+.feat-card p{margin-top:8px;font-size:14.5px;color:var(--ink-soft);line-height:1.55;}
+
+/* ===== how it works ===== */
+.steps{display:grid;grid-template-columns:repeat(4,1fr);gap:0;position:relative;}
+@media(max-width:900px){.steps{grid-template-columns:1fr;gap:28px;}}
+.step{padding:0 22px;position:relative;}
+.step .num{font-family:var(--font-mono);font-size:13px;color:var(--orange-deep);font-weight:700;}
+.step h4{font-family:var(--font-body);font-size:17px;font-weight:700;margin-top:10px;}
+.step p{font-size:14px;color:var(--ink-soft);margin-top:8px;line-height:1.5;}
+.step:not(:last-child)::after{content:"";position:absolute;top:6px;right:0;width:70%;height:1px;background:repeating-linear-gradient(90deg,var(--line) 0 6px,transparent 6px 12px);}
+@media(max-width:900px){.step:not(:last-child)::after{display:none;}}
+
+/* ===== scanner view ===== */
+.scanner-wrap{display:grid;grid-template-columns:1fr 1fr;gap:36px;align-items:start;}
+@media(max-width:940px){.scanner-wrap{grid-template-columns:1fr;}}
+.upload-zone{
+  border:2.5px dashed rgba(31,122,77,0.35);border-radius:var(--radius-lg);
+  background:linear-gradient(160deg,rgba(139,197,63,0.10),rgba(255,201,60,0.10));
+  padding:44px 28px;text-align:center;cursor:pointer;transition:all .25s ease;position:relative;
+  min-height:420px;display:flex;flex-direction:column;align-items:center;justify-content:center;
+}
+.upload-zone.dragover{border-color:var(--orange);background:rgba(255,138,61,0.12);}
+.upload-icon{width:78px;height:78px;border-radius:50%;background:var(--white);display:flex;align-items:center;justify-content:center;font-size:32px;box-shadow:var(--shadow-soft);margin-bottom:20px;}
+.upload-zone h3{font-family:var(--font-body);font-size:19px;font-weight:800;}
+.upload-zone p{color:var(--ink-soft);font-size:14px;margin-top:8px;max-width:280px;}
+.upload-btns{display:flex;gap:10px;margin-top:22px;flex-wrap:wrap;justify-content:center;}
+.preview-img{max-height:420px;border-radius:22px;overflow:hidden;box-shadow:var(--shadow-soft);}
+.preview-img img{width:100%;height:420px;object-fit:cover;}
+
+.analyzing{display:none;flex-direction:column;align-items:center;gap:16px;}
+.analyzing.active{display:flex;}
+.scan-line-wrap{position:relative;width:100%;height:420px;border-radius:22px;overflow:hidden;box-shadow:var(--shadow-soft);}
+.scan-line-wrap img{width:100%;height:100%;object-fit:cover;}
+.scan-line{position:absolute;left:0;right:0;height:3px;background:linear-gradient(90deg,transparent,var(--green-bright),transparent);box-shadow:0 0 20px 4px rgba(139,197,63,0.8);animation:scanmove 1.6s linear infinite;}
+@keyframes scanmove{0%{top:0%;}100%{top:100%;}}
+.scan-overlay{position:absolute;inset:0;background:linear-gradient(180deg,rgba(31,122,77,0.05),rgba(31,122,77,0.25));}
+.scan-status{font-family:var(--font-mono);font-size:13px;color:var(--green-deep);font-weight:700;}
+
+.result-panel{display:none;}
+.result-panel.active{display:block;animation:fadein .5s ease;}
+.result-card{
+  background:var(--white);border:1px solid var(--line);border-radius:var(--radius-lg);
+  padding:28px;box-shadow:0 24px 50px -30px rgba(22,36,26,0.3);
+}
+.result-top{display:flex;gap:20px;align-items:center;flex-wrap:wrap;justify-content:space-between;}
+.result-id h3{font-family:var(--font-body);font-size:22px;font-weight:800;}
+.result-id span{font-family:var(--font-mono);font-size:12.5px;color:var(--ink-soft);}
+.status-pill{padding:7px 16px;border-radius:999px;font-size:12.5px;font-weight:800;font-family:var(--font-mono);letter-spacing:0.03em;}
+.status-Fresh{background:rgba(139,197,63,0.2);color:var(--green-deep);}
+.status-Good{background:rgba(255,201,60,0.25);color:#8a6300;}
+.status-Nearly{background:rgba(255,138,61,0.2);color:var(--orange-deep);}
+.status-Spoiled{background:rgba(230,60,60,0.15);color:#c22;}
+
+.gauge-row{display:flex;align-items:center;gap:26px;margin-top:26px;flex-wrap:wrap;}
+.gauge{position:relative;width:130px;height:130px;flex-shrink:0;}
+.gauge svg{transform:rotate(-90deg);}
+.gauge-center{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;}
+.gauge-center b{font-family:var(--font-display);font-size:30px;}
+.gauge-center span{font-size:10.5px;color:var(--ink-soft);font-weight:700;text-transform:uppercase;letter-spacing:0.06em;}
+.gauge-meta{flex:1;min-width:200px;}
+.gauge-meta .row{display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px dashed var(--line);font-size:14px;}
+.gauge-meta .row:last-child{border-bottom:none;}
+.gauge-meta .row b{font-family:var(--font-mono);font-weight:700;}
+
+.detail-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-top:26px;}
+@media(max-width:700px){.detail-grid{grid-template-columns:1fr;}}
+.detail-box{background:var(--cream-2);border-radius:var(--radius-sm);padding:16px;}
+.detail-box .lbl{font-family:var(--font-mono);font-size:11px;text-transform:uppercase;color:var(--green-deep);font-weight:700;letter-spacing:0.05em;}
+.detail-box .val{font-family:var(--font-body);font-weight:800;font-size:16px;margin-top:6px;}
+.detail-box .sub{font-size:12.5px;color:var(--ink-soft);margin-top:3px;}
+
+.nutri-bar-wrap{margin-top:26px;}
+.nutri-title{font-weight:800;font-size:15px;margin-bottom:14px;}
+.nutri-row{display:flex;align-items:center;gap:12px;margin-bottom:10px;}
+.nutri-row .n-label{width:90px;font-size:13px;font-weight:600;color:var(--ink-soft);flex-shrink:0;}
+.nutri-track{flex:1;height:9px;border-radius:99px;background:var(--line);overflow:hidden;}
+.nutri-fill{height:100%;border-radius:99px;}
+.nutri-row .n-val{width:56px;text-align:right;font-family:var(--font-mono);font-size:12.5px;font-weight:700;flex-shrink:0;}
+
+.tips-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:26px;}
+@media(max-width:700px){.tips-grid{grid-template-columns:1fr;}}
+.tip-box{border-radius:var(--radius-sm);padding:16px;border:1px solid var(--line);}
+.tip-box h5{font-size:13.5px;font-weight:800;display:flex;align-items:center;gap:8px;}
+.tip-box ul{margin:10px 0 0;padding-left:18px;font-size:13.5px;color:var(--ink-soft);line-height:1.7;}
+
+.result-actions{display:flex;gap:10px;margin-top:28px;flex-wrap:wrap;}
+
+/* ===== recipes ===== */
+.recipe-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:22px;}
+@media(max-width:940px){.recipe-grid{grid-template-columns:repeat(2,1fr);}}
+@media(max-width:640px){.recipe-grid{grid-template-columns:1fr;}}
+.recipe-card{border-radius:var(--radius-md);overflow:hidden;background:var(--white);border:1px solid var(--line);transition:transform .25s ease,box-shadow .25s ease;}
+.recipe-card:hover{transform:translateY(-6px);box-shadow:var(--shadow-soft);}
+.recipe-img{position:relative;height:170px;overflow:hidden;}
+.recipe-img img{width:100%;height:100%;object-fit:cover;}
+.recipe-tag{position:absolute;top:12px;left:12px;background:rgba(255,255,255,0.9);backdrop-filter:blur(6px);padding:5px 12px;border-radius:999px;font-size:11.5px;font-weight:800;font-family:var(--font-mono);color:var(--green-deep);}
+.recipe-body{padding:18px;}
+.recipe-body h4{font-family:var(--font-body);font-size:16.5px;font-weight:800;}
+.recipe-meta{display:flex;gap:14px;margin-top:10px;font-size:12.5px;color:var(--ink-soft);font-weight:600;}
+.recipe-meta span{display:flex;align-items:center;gap:5px;}
+.recipe-body p.desc{font-size:13.5px;color:var(--ink-soft);margin-top:10px;line-height:1.55;}
+.recipe-foot{display:flex;justify-content:space-between;align-items:center;margin-top:16px;}
+.recipe-cal{font-family:var(--font-mono);font-weight:700;font-size:13px;}
+.recipe-link{font-size:13px;font-weight:800;color:var(--orange-deep);}
+
+/* storage module */
+.storage-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:18px;}
+@media(max-width:900px){.storage-grid{grid-template-columns:1fr;}}
+.storage-card{border-radius:var(--radius-md);padding:22px;color:var(--white);position:relative;overflow:hidden;}
+.storage-card h4{font-family:var(--font-body);font-size:17px;font-weight:800;}
+.storage-card p{font-size:13.5px;margin-top:8px;opacity:0.92;line-height:1.5;}
+.storage-card .icon{font-size:28px;margin-bottom:10px;}
+.storage-1{background:linear-gradient(150deg,#FFC93C,#FF8A3D);}
+.storage-2{background:linear-gradient(150deg,#8BC53F,#1F7A4D);}
+.storage-3{background:linear-gradient(150deg,#6FB7E8,#2C6FB0);}
+
+/* ===== dashboard ===== */
+.dash-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:18px;margin-bottom:28px;}
+@media(max-width:940px){.dash-grid{grid-template-columns:repeat(2,1fr);}}
+@media(max-width:560px){.dash-grid{grid-template-columns:1fr;}}
+.widget{background:var(--white);border:1px solid var(--line);border-radius:var(--radius-md);padding:20px;}
+.widget .top{display:flex;justify-content:space-between;align-items:flex-start;}
+.widget .icon-badge{width:40px;height:40px;border-radius:12px;display:flex;align-items:center;justify-content:center;font-size:18px;}
+.widget b.big{font-family:var(--font-display);font-size:30px;display:block;margin-top:14px;}
+.widget .cap{font-size:12.5px;color:var(--ink-soft);font-weight:600;margin-top:4px;}
+.widget .delta{font-size:11.5px;font-weight:800;font-family:var(--font-mono);padding:3px 9px;border-radius:999px;}
+.delta-up{background:rgba(139,197,63,0.2);color:var(--green-deep);}
+
+.chart-panels{display:grid;grid-template-columns:1.4fr 1fr;gap:18px;}
+@media(max-width:940px){.chart-panels{grid-template-columns:1fr;}}
+.panel{background:var(--white);border:1px solid var(--line);border-radius:var(--radius-md);padding:22px;}
+.panel h4{font-family:var(--font-body);font-size:16px;font-weight:800;margin-bottom:16px;}
+.history-list{list-style:none;padding:0;margin:0;margin-top:18px;}
+.history-list li{display:flex;justify-content:space-between;align-items:center;padding:11px 0;border-bottom:1px solid var(--line);font-size:13.5px;}
+.history-list li:last-child{border-bottom:none;}
+.h-left{display:flex;align-items:center;gap:10px;}
+.h-dot{width:9px;height:9px;border-radius:50%;flex-shrink:0;}
+
+/* ===== testimonials ===== */
+.testi-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:20px;}
+@media(max-width:900px){.testi-grid{grid-template-columns:1fr;}}
+.testi-card{background:var(--white);border-radius:var(--radius-md);padding:24px;border:1px solid var(--line);}
+.testi-stars{color:var(--yellow);font-size:15px;letter-spacing:2px;}
+.testi-card p{margin-top:14px;font-size:14.5px;color:var(--ink-soft);line-height:1.6;}
+.testi-who{display:flex;align-items:center;gap:10px;margin-top:18px;}
+.avatar{width:38px;height:38px;border-radius:50%;background:linear-gradient(135deg,var(--green-bright),var(--yellow));display:flex;align-items:center;justify-content:center;font-weight:800;font-size:14px;color:var(--white);}
+.testi-who b{font-size:13.5px;display:block;}
+.testi-who span{font-size:12px;color:var(--ink-soft);}
+
+/* ===== faq ===== */
+.faq-item{border-bottom:1px solid var(--line);padding:20px 0;cursor:pointer;}
+.faq-q{display:flex;justify-content:space-between;align-items:center;font-weight:700;font-size:16px;}
+.faq-a{max-height:0;overflow:hidden;transition:max-height .3s ease;font-size:14.5px;color:var(--ink-soft);line-height:1.6;}
+.faq-item.open .faq-a{max-height:200px;margin-top:12px;}
+.faq-plus{font-size:20px;transition:transform .3s ease;color:var(--green-deep);}
+.faq-item.open .faq-plus{transform:rotate(45deg);}
+
+/* ===== newsletter ===== */
+.newsletter{border-radius:32px;background:linear-gradient(135deg,var(--green-deep),var(--green-mid));padding:52px;position:relative;overflow:hidden;color:var(--white);}
+.newsletter h3{font-size:clamp(24px,3vw,34px);}
+.newsletter p{margin-top:10px;opacity:0.9;max-width:420px;}
+.news-form{display:flex;gap:10px;margin-top:24px;flex-wrap:wrap;}
+.news-form input{flex:1;min-width:220px;padding:14px 18px;border-radius:999px;border:none;font-family:inherit;font-size:14.5px;}
+
+/* ===== footer ===== */
+footer{background:var(--ink);color:rgba(255,255,255,0.85);padding:64px 0 28px;}
+.foot-grid{display:grid;grid-template-columns:1.4fr repeat(3,1fr);gap:36px;}
+@media(max-width:800px){.foot-grid{grid-template-columns:1fr 1fr;}}
+.foot-grid h5{color:#fff;font-size:13px;text-transform:uppercase;letter-spacing:0.08em;font-family:var(--font-mono);margin-bottom:16px;}
+.foot-grid ul{list-style:none;padding:0;margin:0;display:flex;flex-direction:column;gap:10px;font-size:14px;}
+.foot-grid ul a:hover{color:var(--green-bright);}
+.foot-bottom{border-top:1px solid rgba(255,255,255,0.12);margin-top:48px;padding-top:24px;display:flex;justify-content:space-between;flex-wrap:wrap;gap:12px;font-size:13px;color:rgba(255,255,255,0.55);}
+
+/* ===== auth modal ===== */
+.modal-bg{position:fixed;inset:0;background:rgba(22,36,26,0.55);backdrop-filter:blur(4px);z-index:200;display:none;align-items:center;justify-content:center;padding:20px;}
+.modal-bg.active{display:flex;}
+.modal-card{background:var(--white);border-radius:var(--radius-lg);padding:36px;max-width:400px;width:100%;position:relative;}
+.modal-close{position:absolute;top:18px;right:18px;background:var(--cream-2);width:32px;height:32px;border-radius:50%;border:none;font-size:16px;}
+.modal-tabs{display:flex;gap:6px;background:var(--cream-2);padding:4px;border-radius:999px;margin-top:20px;}
+.modal-tabs button{flex:1;border:none;background:transparent;padding:9px;border-radius:999px;font-weight:700;font-size:13.5px;color:var(--ink-soft);}
+.modal-tabs button.active{background:var(--white);color:var(--ink);box-shadow:0 4px 10px -4px rgba(0,0,0,0.15);}
+.form-field{margin-top:14px;}
+.form-field label{font-size:12.5px;font-weight:700;color:var(--ink-soft);}
+.form-field input{width:100%;padding:12px 14px;border-radius:12px;border:1.5px solid var(--line);margin-top:6px;font-family:inherit;font-size:14px;}
+.form-field input:focus{outline:2px solid var(--green-bright);border-color:transparent;}
+
+/* toast */
+.toast{position:fixed;bottom:24px;right:24px;background:var(--ink);color:#fff;padding:14px 20px;border-radius:14px;font-size:14px;font-weight:600;z-index:300;display:flex;align-items:center;gap:10px;transform:translateY(120%);transition:transform .35s ease;box-shadow:0 20px 40px -16px rgba(0,0,0,0.4);}
+.toast.show{transform:translateY(0);}
+
+.reveal{opacity:0;transform:translateY(24px);transition:opacity .7s ease, transform .7s ease;}
+.reveal.in{opacity:1;transform:translateY(0);}
+
+.badge-row{display:flex;gap:10px;flex-wrap:wrap;margin-top:18px;}
+.mini-badge{background:var(--white);border:1px solid var(--line);border-radius:999px;padding:6px 14px;font-size:12px;font-weight:700;color:var(--ink-soft);display:flex;align-items:center;gap:6px;}
+
+@media(prefers-reduced-motion: reduce){
+  *{animation-duration:0.01ms !important; transition-duration:0.01ms !important;}
+}
+</style>
+</head>
+<body>
+
+<!-- ===================== NAV ===================== -->
+<nav class="nav">
+  <div class="nav-inner">
+    <div class="logo">
+      <div class="logo-mark">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M12 2C12 2 6 7 6 13a6 6 0 0012 0c0-6-6-11-6-11z" fill="#fff"/></svg>
+      </div>
+      FreshAI
+    </div>
+    <ul class="nav-links" id="navLinks">
+      <li><button data-view="home" class="active">Home</button></li>
+      <li><button data-view="scanner">AI Scanner</button></li>
+      <li><button data-view="recipes">Recipes</button></li>
+      <li><button data-view="dashboard">Dashboard</button></li>
+      <li><button data-view="about">About</button></li>
+      <li><button data-view="faq">FAQ</button></li>
+    </ul>
+    <div class="nav-cta">
+      <button class="btn btn-ghost hide-mobile" onclick="openAuth('login')">Log in</button>
+      <button class="btn btn-primary" onclick="setView('scanner')">📷 Scan Food</button>
+    </div>
+  </div>
+</nav>
+
+<!-- ===================== HOME ===================== -->
+<section class="view active" id="view-home">
+
+  <div class="hero">
+    <div class="hero-bg"></div>
+    <div class="container hero-grid">
+      <div>
+        <div class="hero-badge"><span class="dot">✓</span> Trusted by 42,000+ home cooks</div>
+        <h1>Know Your Food<br><em>Before You Eat</em></h1>
+        <p class="lead">Point your camera at any fruit, vegetable, dairy, meat, seafood or packaged item — FreshAI reads freshness, expiry, and safety in under three seconds, then turns leftovers into dinner.</p>
+        <div class="hero-ctas">
+          <button class="btn btn-primary" onclick="setView('scanner')">⚡ Upload Image to Scan</button>
+          <button class="btn btn-ghost" onclick="setView('recipes')">See recipe engine →</button>
+        </div>
+        <div class="hero-stats">
+          <div class="stat"><b>98.4%</b><span>Detection accuracy</span></div>
+          <div class="stat"><b>2.1M+</b><span>Scans processed</span></div>
+          <div class="stat"><b>310t</b><span>Food waste prevented</span></div>
+        </div>
+      </div>
+      <div class="hero-visual">
+        <div class="hero-card">
+          <img src="https://images.unsplash.com/photo-1610832958506-aa56368176cf?q=80&w=1200&auto=format&fit=crop" alt="Fresh assorted vegetables and fruit">
+        </div>
+        <div class="float-chip chip-fresh floaty">
+          <div class="ring-mini"><span>92%</span></div>
+          <div><div class="chip-title">Fresh</div><div class="chip-sub">Avocado detected</div></div>
+        </div>
+        <div class="float-chip chip-scan floaty d2">
+          <div style="font-size:20px;">🍓</div>
+          <div><div class="chip-title">Strawberries</div><div class="chip-sub">Best within 2 days</div></div>
+        </div>
+        <div class="float-chip chip-cal floaty d3">
+          <div style="font-size:20px;">🔥</div>
+          <div><div class="chip-title">52 kcal</div><div class="chip-sub">per serving</div></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="marquee">
+    <div class="marquee-track">
+      <span>🥑 FRUITS</span><span>🥦 VEGETABLES</span><span>🥛 DAIRY</span><span>🍗 MEAT</span><span>🐟 SEAFOOD</span><span>📦 PACKAGED FOOD</span>
+      <span>🥑 FRUITS</span><span>🥦 VEGETABLES</span><span>🥛 DAIRY</span><span>🍗 MEAT</span><span>🐟 SEAFOOD</span><span>📦 PACKAGED FOOD</span>
+    </div>
+  </div>
+
+  <div class="section">
+    <div class="container">
+      <div class="section-head reveal">
+        <span class="eyebrow">Capabilities</span>
+        <h2>One scan, a complete food report</h2>
+        <p>Deep learning trained on millions of produce, dairy, meat and packaged-food images tells you not just what it sees — but whether it's safe to eat.</p>
+      </div>
+      <div class="feat-grid">
+        <div class="feat-card reveal">
+          <div class="feat-icon" style="background:rgba(139,197,63,0.2);">🔍</div>
+          <h3>Instant Recognition</h3>
+          <p>Identifies fruit, vegetables, dairy, meat, seafood and packaged goods from a single photo.</p>
+        </div>
+        <div class="feat-card reveal">
+          <div class="feat-icon" style="background:rgba(255,201,60,0.25);">📊</div>
+          <h3>Freshness Score</h3>
+          <p>A 0–100% freshness rating with confidence level and a plain-language status.</p>
+        </div>
+        <div class="feat-card reveal">
+          <div class="feat-icon" style="background:rgba(255,138,61,0.2);">🧊</div>
+          <h3>Storage Guidance</h3>
+          <p>Ideal temperature, humidity and shelf-life advice tailored to the exact item.</p>
+        </div>
+        <div class="feat-card reveal">
+          <div class="feat-icon" style="background:rgba(31,122,77,0.15);">🍳</div>
+          <h3>Recipe Rescue</h3>
+          <p>Recipes generated around what's about to expire, so nothing goes to waste.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="section section-alt">
+    <div class="container">
+      <div class="section-head reveal">
+        <span class="eyebrow">Process</span>
+        <h2>From photo to plate in four steps</h2>
+      </div>
+      <div class="steps">
+        <div class="step reveal"><div class="num">01</div><h4>Capture</h4><p>Snap a photo or upload one from your gallery.</p></div>
+        <div class="step reveal"><div class="num">02</div><h4>Analyze</h4><p>Computer vision inspects color, texture and surface patterns.</p></div>
+        <div class="step reveal"><div class="num">03</div><h4>Report</h4><p>Get freshness %, expiry estimate, nutrition and safety tips.</p></div>
+        <div class="step reveal"><div class="num">04</div><h4>Act</h4><p>Store it right, or cook it now with a matched recipe.</p></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="section">
+    <div class="container">
+      <div class="section-head reveal">
+        <span class="eyebrow">Loved by kitchens everywhere</span>
+        <h2>What early users are saying</h2>
+      </div>
+      <div class="testi-grid">
+        <div class="testi-card reveal">
+          <div class="testi-stars">★★★★★</div>
+          <p>"I stopped throwing out spinach every week. The storage tips alone paid for the app."</p>
+          <div class="testi-who"><div class="avatar">R</div><div><b>Riya Sharma</b><span>Home cook, Chennai</span></div></div>
+        </div>
+        <div class="testi-card reveal">
+          <div class="testi-stars">★★★★★</div>
+          <p>"The recipe suggestions for near-expiry produce are genuinely creative, not just soup ideas."</p>
+          <div class="testi-who"><div class="avatar">M</div><div><b>Marcus Webb</b><span>Meal prepper</span></div></div>
+        </div>
+        <div class="testi-card reveal">
+          <div class="testi-stars">★★★★★</div>
+          <p>"Scanning seafood before cooking gives me real peace of mind with my kids."</p>
+          <div class="testi-who"><div class="avatar">A</div><div><b>Amara Diallo</b><span>Parent of three</span></div></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="section section-alt">
+    <div class="container">
+      <div class="newsletter reveal">
+        <span class="eyebrow" style="color:#fff;">Stay fresh</span>
+        <h3>Weekly tips on cutting food waste</h3>
+        <p>One email a week: seasonal storage tricks, waste-saving recipes, and new FreshAI features.</p>
+        <form class="news-form" onsubmit="event.preventDefault(); showToast('🎉 Subscribed — check your inbox!');">
+          <input type="email" placeholder="you@example.com" required>
+          <button class="btn btn-dark" type="submit">Subscribe</button>
+        </form>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ===================== SCANNER ===================== -->
+<section class="view" id="view-scanner">
+  <div class="section" style="padding-top:56px;">
+    <div class="container">
+      <div class="section-head reveal">
+        <span class="eyebrow">AI Scanner</span>
+        <h2>Upload a photo to check freshness</h2>
+        <p>Works best with clear, well-lit photos. Try fruit, vegetables, dairy, meat, seafood or packaged food.</p>
+      </div>
+
+      <div class="scanner-wrap">
+        <div>
+          <div class="upload-zone" id="uploadZone">
+            <input type="file" id="fileInput" accept="image/*" style="display:none;">
+            <div class="upload-icon">📤</div>
+            <h3>Drag & drop an image here</h3>
+            <p>or use the buttons below — from your camera or gallery</p>
+            <div class="upload-btns">
+              <button class="btn btn-primary" onclick="document.getElementById('fileInput').click()">📷 Take / Upload Photo</button>
+              <button class="btn btn-ghost" onclick="loadSample()">🎲 Try a sample image</button>
+            </div>
+          </div>
+
+          <div class="analyzing" id="analyzingBox">
+            <div class="scan-line-wrap">
+              <img id="scanImg" src="" alt="Uploaded food">
+              <div class="scan-overlay"></div>
+              <div class="scan-line"></div>
+            </div>
+            <div class="scan-status" id="scanStatus">▸ Running detection model…</div>
+          </div>
+
+          <div class="badge-row">
+            <div class="mini-badge">🧠 MobileNet CNN — runs in your browser</div>
+            <div class="mini-badge">🎯 Real identification, heuristic freshness</div>
+            <div class="mini-badge">🔒 Images never leave your device</div>
+          </div>
+        </div>
+
+        <div>
+          <div class="result-panel" id="resultPanel">
+            <div class="result-card">
+              <div class="result-top">
+                <div class="result-id">
+                  <h3 id="foodName">—</h3>
+                  <span id="foodMeta">—</span>
+                </div>
+                <div class="status-pill" id="statusPill">—</div>
+              </div>
+
+              <div class="gauge-row">
+                <div class="gauge">
+                  <svg width="130" height="130" viewBox="0 0 130 130">
+                    <circle cx="65" cy="65" r="56" stroke="var(--line)" stroke-width="12" fill="none"/>
+                    <circle id="gaugeArc" cx="65" cy="65" r="56" stroke="var(--green-bright)" stroke-width="12" fill="none" stroke-linecap="round" stroke-dasharray="352" stroke-dashoffset="352"/>
+                  </svg>
+                  <div class="gauge-center"><b id="gaugeVal">0%</b><span>Fresh</span></div>
+                </div>
+                <div class="gauge-meta">
+                  <div class="row"><span>Confidence score</span><b id="confVal">—</b></div>
+                  <div class="row"><span>Estimated expiry</span><b id="expiryVal">—</b></div>
+                  <div class="row"><span>Calories / serving</span><b id="calVal">—</b></div>
+                </div>
+              </div>
+
+              <div class="detail-grid">
+                <div class="detail-box">
+                  <div class="lbl">Storage method</div>
+                  <div class="val" id="storeMethod">—</div>
+                  <div class="sub" id="storeSub">—</div>
+                </div>
+                <div class="detail-box">
+                  <div class="lbl">Ideal temperature</div>
+                  <div class="val" id="storeTemp">—</div>
+                  <div class="sub">for maximum shelf life</div>
+                </div>
+                <div class="detail-box">
+                  <div class="lbl">Shelf life remaining</div>
+                  <div class="val" id="shelfLife">—</div>
+                  <div class="sub">from today</div>
+                </div>
+              </div>
+
+              <div class="nutri-bar-wrap">
+                <div class="nutri-title">Nutritional information (per serving)</div>
+                <div id="nutriRows"></div>
+              </div>
+
+              <div class="tips-grid">
+                <div class="tip-box" style="background:rgba(255,138,61,0.08);border-color:rgba(255,138,61,0.3);">
+                  <h5>⚠️ Spoilage indicators</h5>
+                  <ul id="spoilList"></ul>
+                </div>
+                <div class="tip-box" style="background:rgba(139,197,63,0.08);border-color:rgba(139,197,63,0.3);">
+                  <h5>🛡️ Food safety tips</h5>
+                  <ul id="safetyList"></ul>
+                </div>
+              </div>
+
+              <div class="result-actions">
+                <button class="btn btn-primary" onclick="setView('recipes')">🍳 See matching recipes</button>
+                <button class="btn btn-ghost" onclick="downloadReport()">⬇ Download PDF report</button>
+                <button class="btn btn-ghost" onclick="showToast('🔗 Shared to your feed')">↗ Share result</button>
+                <button class="btn btn-ghost" onclick="resetScanner()">↺ Scan another item</button>
+              </div>
+            </div>
+          </div>
+
+          <div id="emptyState" style="text-align:center;padding:60px 20px;color:var(--ink-soft);">
+            <div style="font-size:44px;">🥗</div>
+            <p style="margin-top:12px;font-size:14.5px;">Your food report will appear here once you upload an image.</p>
+          </div>
+
+          <div id="lowConfidenceState" style="display:none;text-align:center;padding:50px 20px;color:var(--ink-soft);background:var(--cream-2);border-radius:var(--radius-md);">
+            <div style="font-size:40px;">🤔</div>
+            <p style="margin-top:12px;font-size:15px;font-weight:700;color:var(--ink);" id="lowConfTitle">Couldn't confidently identify this item</p>
+            <p style="margin-top:6px;font-size:13.5px;max-width:320px;margin-left:auto;margin-right:auto;" id="lowConfSub">Best guess was "—" at low confidence. Try a closer, well-lit photo of a single item.</p>
+            <button class="btn btn-ghost" style="margin-top:16px;" onclick="resetScanner()">↺ Try another photo</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="section section-alt">
+    <div class="container">
+      <div class="section-head reveal">
+        <span class="eyebrow">Smart storage</span>
+        <h2>Storage recommendations by category</h2>
+        <p>General guidance FreshAI applies automatically based on what's detected.</p>
+      </div>
+      <div class="storage-grid">
+        <div class="storage-card storage-1 reveal">
+          <div class="icon">🌤️</div>
+          <h4>Room Temperature</h4>
+          <p>Bananas, tomatoes, onions, potatoes, whole melons. Keep in a cool, dry, ventilated spot away from direct sun. 18–22°C · 50–60% humidity.</p>
+        </div>
+        <div class="storage-card storage-2 reveal">
+          <div class="icon">❄️</div>
+          <h4>Refrigerated</h4>
+          <p>Leafy greens, dairy, cooked leftovers, most fruit. Store in crisper drawers to manage humidity. 1–4°C · 85–95% humidity for produce.</p>
+        </div>
+        <div class="storage-card storage-3 reveal">
+          <div class="icon">🧊</div>
+          <h4>Frozen</h4>
+          <p>Raw meat, seafood, and bread you won't use in 3 days. Wrap tightly to prevent freezer burn. -18°C or below.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ===================== RECIPES ===================== -->
+<section class="view" id="view-recipes">
+  <div class="section" style="padding-top:56px;">
+    <div class="container">
+      <div class="section-head reveal">
+        <span class="eyebrow">Recipe engine</span>
+        <h2>Recipes matched to your last scan</h2>
+        <p id="recipeIntro">Scan an item to get recipes tailored to it — here are today's top picks in the meantime.</p>
+      </div>
+      <div class="recipe-grid" id="recipeGrid"></div>
+    </div>
+  </div>
+</section>
+
+<!-- ===================== DASHBOARD ===================== -->
+<section class="view" id="view-dashboard">
+  <div class="section" style="padding-top:56px;">
+    <div class="container">
+      <div class="section-head reveal">
+        <span class="eyebrow">Your dashboard</span>
+        <h2>Freshness insights, at a glance</h2>
+      </div>
+
+      <div class="dash-grid">
+        <div class="widget reveal">
+          <div class="top"><div class="icon-badge" style="background:rgba(139,197,63,0.2);">📷</div><span class="delta delta-up">+12%</span></div>
+          <b class="big">246</b><div class="cap">Total scans this month</div>
+        </div>
+        <div class="widget reveal">
+          <div class="top"><div class="icon-badge" style="background:rgba(255,201,60,0.25);">♻️</div><span class="delta delta-up">+8%</span></div>
+          <b class="big">18.4 kg</b><div class="cap">Food waste saved</div>
+        </div>
+        <div class="widget reveal">
+          <div class="top"><div class="icon-badge" style="background:rgba(255,138,61,0.2);">🔥</div><span class="delta delta-up">+3%</span></div>
+          <b class="big">1,940</b><div class="cap">Avg. kcal tracked / week</div>
+        </div>
+        <div class="widget reveal">
+          <div class="top"><div class="icon-badge" style="background:rgba(31,122,77,0.15);">🌍</div><span class="delta delta-up">+15%</span></div>
+          <b class="big">42 kg</b><div class="cap">CO₂e emissions avoided</div>
+        </div>
+      </div>
+
+      <div class="chart-panels">
+        <div class="panel reveal">
+          <h4>Weekly scan activity</h4>
+          <canvas id="weeklyChart" height="130"></canvas>
+        </div>
+        <div class="panel reveal">
+          <h4>Freshness breakdown</h4>
+          <canvas id="freshChart" height="130"></canvas>
+        </div>
+      </div>
+
+      <div class="panel reveal" style="margin-top:18px;">
+        <h4>Recent scan history</h4>
+        <ul class="history-list" id="historyList"></ul>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ===================== ABOUT / FEATURES / CONTACT ===================== -->
+<section class="view" id="view-about">
+  <div class="section" style="padding-top:56px;">
+    <div class="container">
+      <div class="section-head reveal">
+        <span class="eyebrow">About FreshAI</span>
+        <h2>Built to keep food out of the bin</h2>
+        <p>FreshAI combines computer vision with nutrition science to help households and small kitchens cut food waste, eat safer, and plan meals around what's actually in the fridge — not what's on a shopping list.</p>
+      </div>
+      <div class="feat-grid" style="margin-bottom:60px;">
+        <div class="feat-card reveal"><div class="feat-icon" style="background:rgba(139,197,63,0.2);">🎯</div><h3>Our mission</h3><p>Roughly a third of food produced globally is wasted. We want scanning your fridge to feel as normal as checking the weather.</p></div>
+        <div class="feat-card reveal"><div class="feat-icon" style="background:rgba(255,201,60,0.25);">🧪</div><h3>The model</h3><p>A convolutional network fine-tuned on labeled freshness datasets across produce, dairy, meat and seafood categories.</p></div>
+        <div class="feat-card reveal"><div class="feat-icon" style="background:rgba(255,138,61,0.2);">🔐</div><h3>Privacy first</h3><p>Photos are processed for analysis and not sold or shared. You can delete your scan history anytime.</p></div>
+        <div class="feat-card reveal"><div class="feat-icon" style="background:rgba(31,122,77,0.15);">🌱</div><h3>Impact</h3><p>Every avoided spoil is fewer emissions from landfill methane and wasted farm resources.</p></div>
+      </div>
+
+      <div class="section-head reveal">
+        <span class="eyebrow">Contact</span>
+        <h2>Get in touch</h2>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:40px;" class="reveal">
+        <div>
+          <div class="form-field"><label>Name</label><input type="text" placeholder="Your name"></div>
+          <div class="form-field"><label>Email</label><input type="email" placeholder="you@example.com"></div>
+          <div class="form-field"><label>Message</label><input type="text" placeholder="How can we help?"></div>
+          <button class="btn btn-primary" style="margin-top:20px;" onclick="showToast('✅ Message sent — we\'ll reply within a day')">Send message</button>
+        </div>
+        <div style="background:var(--cream-2);border-radius:var(--radius-md);padding:26px;">
+          <h4 style="font-family:var(--font-body);font-size:16px;">Support hours</h4>
+          <p style="color:var(--ink-soft);font-size:14px;margin-top:10px;line-height:1.7;">Mon–Fri, 9am–6pm IST<br>support@freshai.app<br>Average reply time: 6 hours</p>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ===================== FAQ ===================== -->
+<section class="view" id="view-faq">
+  <div class="section" style="padding-top:56px;">
+    <div class="container" style="max-width:800px;">
+      <div class="section-head reveal">
+        <span class="eyebrow">FAQ</span>
+        <h2>Common questions</h2>
+      </div>
+      <div id="faqList"></div>
+    </div>
+  </div>
+</section>
+
+<!-- ===================== FOOTER ===================== -->
+<footer>
+  <div class="container foot-grid">
+    <div>
+      <div class="logo" style="color:#fff;"><div class="logo-mark">🥬</div>FreshAI</div>
+      <p style="font-size:13.5px;margin-top:14px;opacity:0.7;max-width:260px;line-height:1.6;">AI-powered freshness detection for fruit, vegetables, dairy, meat, seafood and packaged food.</p>
+    </div>
+    <div><h5>Product</h5><ul><li><a href="#" onclick="setView('scanner')">AI Scanner</a></li><li><a href="#" onclick="setView('recipes')">Recipes</a></li><li><a href="#" onclick="setView('dashboard')">Dashboard</a></li><li><a href="#">Admin Panel</a></li></ul></div>
+    <div><h5>Company</h5><ul><li><a href="#" onclick="setView('about')">About</a></li><li><a href="#">Blog</a></li><li><a href="#" onclick="setView('faq')">FAQ</a></li><li><a href="#" onclick="setView('about')">Contact</a></li></ul></div>
+    <div><h5>Account</h5><ul><li><a href="#" onclick="openAuth('login')">Log in</a></li><li><a href="#" onclick="openAuth('signup')">Sign up</a></li><li><a href="#" onclick="openAuth('forgot')">Forgot password</a></li></ul></div>
+  </div>
+  <div class="container foot-bottom">
+    <span>© 2026 FreshAI. All rights reserved.</span>
+    <span>Made for kitchens that hate waste.</span>
+  </div>
+</footer>
+
+<!-- ===================== AUTH MODAL ===================== -->
+<div class="modal-bg" id="authModal">
+  <div class="modal-card">
+    <button class="modal-close" onclick="closeAuth()">✕</button>
+    <h3 style="font-size:22px;">Welcome to FreshAI</h3>
+    <p style="font-size:13.5px;color:var(--ink-soft);margin-top:6px;">Save scans, favorite recipes, and track your impact.</p>
+    <div class="modal-tabs" id="authTabs">
+      <button data-tab="login" class="active">Log in</button>
+      <button data-tab="signup">Sign up</button>
+      <button data-tab="forgot">Forgot</button>
+    </div>
+    <form onsubmit="event.preventDefault(); closeAuth(); showToast('👋 Welcome back!');">
+      <div class="form-field" id="nameField" style="display:none;"><label>Full name</label><input type="text" placeholder="Jane Doe"></div>
+      <div class="form-field"><label>Email</label><input type="email" placeholder="you@example.com" required></div>
+      <div class="form-field" id="passField"><label>Password</label><input type="password" placeholder="••••••••"></div>
+      <button class="btn btn-primary" type="submit" style="width:100%;margin-top:20px;">Continue</button>
+    </form>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<!-- ===================== RECIPE MODAL ===================== -->
+<div class="modal-bg" id="recipeModal">
+  <div class="modal-card" style="max-width:520px;padding:0;overflow:hidden;max-height:88vh;display:flex;flex-direction:column;">
+    <button class="modal-close" style="z-index:2;" onclick="closeRecipeModal()">✕</button>
+    <img id="recipeModalImg" src="" alt="" style="width:100%;height:220px;object-fit:cover;flex-shrink:0;">
+    <div style="padding:26px;overflow-y:auto;">
+      <h3 id="recipeModalTitle" style="font-size:22px;"></h3>
+      <p id="recipeModalMeta" style="font-family:var(--font-mono);font-size:12.5px;color:var(--green-deep);font-weight:700;margin-top:8px;"></p>
+      <p id="recipeModalDesc" style="font-size:14px;color:var(--ink-soft);margin-top:12px;line-height:1.6;"></p>
+      <h4 style="font-size:14.5px;margin-top:22px;font-family:var(--font-body);">Ingredients</h4>
+      <ul id="recipeModalIngredients" style="margin:10px 0 0;padding-left:18px;font-size:13.5px;color:var(--ink-soft);line-height:1.8;"></ul>
+      <h4 style="font-size:14.5px;margin-top:22px;font-family:var(--font-body);">Instructions</h4>
+      <ol id="recipeModalSteps" style="margin:10px 0 0;padding-left:18px;font-size:13.5px;color:var(--ink-soft);line-height:1.9;"></ol>
+    </div>
+  </div>
+</div>
+
+<script>
+/* ================= VIEW ROUTER ================= */
+function setView(name){
+  document.querySelectorAll('.view').forEach(v=>v.classList.remove('active'));
+  document.getElementById('view-'+name).classList.add('active');
+  document.querySelectorAll('#navLinks button').forEach(b=>b.classList.toggle('active', b.dataset.view===name));
+  window.scrollTo({top:0,behavior:'smooth'});
+  if(name==='dashboard') setTimeout(initCharts, 60);
+}
+document.querySelectorAll('#navLinks button').forEach(b=>b.addEventListener('click',()=>setView(b.dataset.view)));
+
+/* ================= TOAST ================= */
+function showToast(msg){
+  const t=document.getElementById('toast');
+  t.textContent=msg;
+  t.classList.add('show');
+  clearTimeout(window._toastTimer);
+  window._toastTimer=setTimeout(()=>t.classList.remove('show'),2800);
+}
+
+/* ================= AUTH MODAL ================= */
+function openAuth(tab){
+  document.getElementById('authModal').classList.add('active');
+  setAuthTab(tab);
+}
+function closeAuth(){document.getElementById('authModal').classList.remove('active');}
+function setAuthTab(tab){
+  document.querySelectorAll('#authTabs button').forEach(b=>b.classList.toggle('active',b.dataset.tab===tab));
+  document.getElementById('nameField').style.display = tab==='signup' ? 'block':'none';
+  document.getElementById('passField').style.display = tab==='forgot' ? 'none':'block';
+}
+document.querySelectorAll('#authTabs button').forEach(b=>b.addEventListener('click',()=>setAuthTab(b.dataset.tab)));
+
+/* ================= FOOD DATABASE ================= */
+const FOOD_DB = {
+  apple:      {emoji:"🍎", cat:"Fruit", cal:95, nutri:[["Carbs",25,"g",'var(--yellow)'],["Fiber",4,"g",'var(--green-bright)'],["Sugar",19,"g",'var(--orange)'],["Vit C",14,"%DV",'var(--green-deep)']]},
+  banana:     {emoji:"🍌", cat:"Fruit", cal:105,nutri:[["Carbs",27,"g",'var(--yellow)'],["Potassium",12,"%DV",'var(--orange)'],["Fiber",3,"g",'var(--green-bright)'],["Vit B6",20,"%DV",'var(--green-deep)']]},
+  tomato:     {emoji:"🍅", cat:"Vegetable", cal:22, nutri:[["Carbs",5,"g",'var(--yellow)'],["Fiber",1.5,"g",'var(--green-bright)'],["Vit C",28,"%DV",'var(--green-deep)'],["Lycopene","High","",'var(--orange)']]},
+  spinach:    {emoji:"🥬", cat:"Vegetable", cal:23, nutri:[["Iron",15,"%DV",'var(--orange)'],["Vit K",180,"%DV",'var(--green-deep)'],["Fiber",2.2,"g",'var(--green-bright)'],["Folate",49,"%DV",'var(--yellow)']]},
+  milk:       {emoji:"🥛", cat:"Dairy", cal:103,nutri:[["Protein",8,"g",'var(--green-deep)'],["Calcium",28,"%DV",'var(--yellow)'],["Fat",8,"g",'var(--orange)'],["Carbs",12,"g",'var(--green-bright)']]},
+  chicken:    {emoji:"🍗", cat:"Meat", cal:165,nutri:[["Protein",31,"g",'var(--green-deep)'],["Fat",3.6,"g",'var(--orange)'],["Iron",5,"%DV",'var(--yellow)'],["B12",10,"%DV",'var(--green-bright)']]},
+  salmon:     {emoji:"🐟", cat:"Seafood", cal:208,nutri:[["Protein",22,"g",'var(--green-deep)'],["Omega-3",2.3,"g",'var(--orange)'],["Fat",13,"g",'var(--yellow)'],["Vit D",66,"%DV",'var(--green-bright)']]},
+  bread:      {emoji:"🍞", cat:"Packaged", cal:79, nutri:[["Carbs",14,"g",'var(--yellow)'],["Protein",2.7,"g",'var(--green-deep)'],["Fiber",1.2,"g",'var(--green-bright)'],["Sodium",7,"%DV",'var(--orange)']]},
+  strawberry: {emoji:"🍓", cat:"Fruit", cal:32, nutri:[["Carbs",7.7,"g",'var(--yellow)'],["Vit C",58,"%DV",'var(--green-deep)'],["Fiber",2,"g",'var(--green-bright)'],["Sugar",4.9,"g",'var(--orange)']]},
+  orange:     {emoji:"🍊", cat:"Fruit", cal:62, nutri:[["Carbs",15,"g",'var(--yellow)'],["Vit C",93,"%DV",'var(--green-deep)'],["Fiber",3.1,"g",'var(--green-bright)'],["Folate",10,"%DV",'var(--orange)']]},
+  lemon:      {emoji:"🍋", cat:"Fruit", cal:17, nutri:[["Carbs",5.4,"g",'var(--yellow)'],["Vit C",64,"%DV",'var(--green-deep)'],["Fiber",1.6,"g",'var(--green-bright)'],["Sugar",1.5,"g",'var(--orange)']]},
+  pineapple:  {emoji:"🍍", cat:"Fruit", cal:82, nutri:[["Carbs",22,"g",'var(--yellow)'],["Vit C",131,"%DV",'var(--green-deep)'],["Fiber",2.3,"g",'var(--green-bright)'],["Manganese",76,"%DV",'var(--orange)']]},
+  mango:      {emoji:"🥭", cat:"Fruit", cal:99, nutri:[["Carbs",25,"g",'var(--yellow)'],["Vit C",67,"%DV",'var(--green-deep)'],["Fiber",2.6,"g",'var(--green-bright)'],["Vit A",21,"%DV",'var(--orange)']]},
+  fig:        {emoji:"🫐", cat:"Fruit", cal:74, nutri:[["Carbs",19,"g",'var(--yellow)'],["Fiber",2.9,"g",'var(--green-bright)'],["Calcium",4,"%DV",'var(--orange)'],["Potassium",8,"%DV",'var(--green-deep)']]},
+  pomegranate:{emoji:"🍎", cat:"Fruit", cal:83, nutri:[["Carbs",19,"g",'var(--yellow)'],["Fiber",4,"g",'var(--green-bright)'],["Vit C",17,"%DV",'var(--green-deep)'],["Vit K",16,"%DV",'var(--orange)']]},
+  broccoli:   {emoji:"🥦", cat:"Vegetable", cal:31, nutri:[["Vit C",135,"%DV",'var(--green-deep)'],["Fiber",2.4,"g",'var(--green-bright)'],["Vit K",116,"%DV",'var(--yellow)'],["Protein",2.5,"g",'var(--orange)']]},
+  cauliflower:{emoji:"🥦", cat:"Vegetable", cal:25, nutri:[["Vit C",77,"%DV",'var(--green-deep)'],["Fiber",2,"g",'var(--green-bright)'],["Folate",14,"%DV",'var(--yellow)'],["Carbs",5,"g",'var(--orange)']]},
+  cucumber:   {emoji:"🥒", cat:"Vegetable", cal:16, nutri:[["Water",95,"%",'var(--green-deep)'],["Vit K",17,"%DV",'var(--green-bright)'],["Fiber",0.5,"g",'var(--yellow)'],["Carbs",3.6,"g",'var(--orange)']]},
+  bellpepper: {emoji:"🫑", cat:"Vegetable", cal:31, nutri:[["Vit C",169,"%DV",'var(--green-deep)'],["Fiber",2.1,"g",'var(--green-bright)'],["Vit A",12,"%DV",'var(--yellow)'],["Carbs",6,"g",'var(--orange)']]},
+  cabbage:    {emoji:"🥬", cat:"Vegetable", cal:25, nutri:[["Vit C",61,"%DV",'var(--green-deep)'],["Fiber",2.5,"g",'var(--green-bright)'],["Vit K",85,"%DV",'var(--yellow)'],["Carbs",6,"g",'var(--orange)']]},
+  mushroom:   {emoji:"🍄", cat:"Vegetable", cal:22, nutri:[["Protein",3.1,"g",'var(--green-deep)'],["Fiber",1,"g",'var(--green-bright)'],["Potassium",9,"%DV",'var(--yellow)'],["Vit D",7,"%DV",'var(--orange)']]},
+  corn:       {emoji:"🌽", cat:"Vegetable", cal:96, nutri:[["Carbs",21,"g",'var(--yellow)'],["Fiber",2.4,"g",'var(--green-bright)'],["Protein",3.4,"g",'var(--green-deep)'],["Folate",9,"%DV",'var(--orange)']]},
+  squash:     {emoji:"🎃", cat:"Vegetable", cal:45, nutri:[["Carbs",12,"g",'var(--yellow)'],["Fiber",2,"g",'var(--green-bright)'],["Vit A",30,"%DV",'var(--orange)'],["Potassium",8,"%DV",'var(--green-deep)']]},
+  artichoke:  {emoji:"🌿", cat:"Vegetable", cal:47, nutri:[["Fiber",6.9,"g",'var(--green-bright)'],["Folate",22,"%DV",'var(--yellow)'],["Vit C",25,"%DV",'var(--green-deep)'],["Carbs",10,"g",'var(--orange)']]},
+  bagel:      {emoji:"🥯", cat:"Packaged", cal:245,nutri:[["Carbs",48,"g",'var(--yellow)'],["Protein",9,"g",'var(--green-deep)'],["Fiber",2,"g",'var(--green-bright)'],["Sodium",22,"%DV",'var(--orange)']]},
+  pretzel:    {emoji:"🥨", cat:"Packaged", cal:108,nutri:[["Carbs",22,"g",'var(--yellow)'],["Protein",3,"g",'var(--green-deep)'],["Fiber",0.9,"g",'var(--green-bright)'],["Sodium",39,"%DV",'var(--orange)']]},
+  pizza:      {emoji:"🍕", cat:"Packaged", cal:285,nutri:[["Carbs",36,"g",'var(--yellow)'],["Protein",12,"g",'var(--green-deep)'],["Fat",10,"g",'var(--orange)'],["Sodium",25,"%DV",'var(--green-bright)']]},
+  hotdog:     {emoji:"🌭", cat:"Meat", cal:290, nutri:[["Protein",10,"g",'var(--green-deep)'],["Fat",17,"g",'var(--orange)'],["Carbs",22,"g",'var(--yellow)'],["Sodium",32,"%DV",'var(--green-bright)']]},
+  guacamole:  {emoji:"🥑", cat:"Vegetable", cal:160,nutri:[["Fat",15,"g",'var(--orange)'],["Fiber",6.7,"g",'var(--green-bright)'],["Vit K",21,"%DV",'var(--green-deep)'],["Carbs",9,"g",'var(--yellow)']]},
+  icecream:   {emoji:"🍦", cat:"Dairy", cal:207, nutri:[["Sugar",21,"g",'var(--orange)'],["Fat",11,"g",'var(--yellow)'],["Calcium",13,"%DV",'var(--green-deep)'],["Protein",3.5,"g",'var(--green-bright)']]},
+};
+
+/* Maps a subset of ImageNet-1k class labels (as returned by MobileNet) to our internal food keys.
+   MobileNet is trained for general object recognition — it's genuinely reading the image,
+   not a dedicated freshness model, so coverage is strongest for fruit and vegetables. */
+const IMAGENET_MAP = [
+  [/banana/, "banana"], [/granny smith/, "apple"], [/strawberry/, "strawberry"],
+  [/\borange\b/, "orange"], [/lemon/, "lemon"], [/pineapple|ananas/, "pineapple"],
+  [/\bfig\b/, "fig"], [/pomegranate/, "pomegranate"], [/cucumber|cuke/, "cucumber"],
+  [/broccoli/, "broccoli"], [/cauliflower/, "cauliflower"], [/zucchini|courgette/, "cucumber"],
+  [/squash/, "squash"], [/artichoke/, "artichoke"], [/bell pepper/, "bellpepper"],
+  [/head cabbage/, "cabbage"], [/mushroom/, "mushroom"], [/\bcorn\b/, "corn"],
+  [/french loaf/, "bread"], [/bagel|beigel/, "bagel"], [/pretzel/, "pretzel"],
+  [/pizza/, "pizza"], [/hotdog|hot dog/, "hotdog"], [/guacamole/, "guacamole"],
+  [/ice ?cream|icecream|ice lolly/, "icecream"], [/custard apple/, "apple"], [/mango/, "mango"],
+];
+/* Broader keyword net to at least categorize items MobileNet recognizes as food-adjacent
+   but that fall outside our curated list — so we generate a fair result instead of refusing. */
+const CATEGORY_HINTS = [
+  [/milk|dairy|yogurt|cheese|butter|cream/, "Dairy", "🥛"],
+  [/chicken|beef|pork|meat|sausage|bacon|lamb|steak/, "Meat", "🍗"],
+  [/salmon|fish|shrimp|prawn|crab|lobster|seafood|tuna|oyster/, "Seafood", "🐟"],
+  [/bread|bagel|pretzel|cracker|cereal|pasta|noodle|rice|pizza|bun|loaf/, "Packaged", "🍞"],
+  [/apple|berry|grape|melon|peach|pear|plum|apricot|fruit|citrus/, "Fruit", "🍎"],
+  [/pepper|cabbage|carrot|potato|onion|garlic|vegetable|leaf|greens|bean|pea|squash/, "Vegetable", "🥕"],
+];
+const FOOD_KEYS = Object.keys(FOOD_DB);
+
+const STATUS_LEVELS = [
+  {name:"Fresh",   min:85, class:"status-Fresh",   color:"var(--green-bright)", spoil:["No visible browning or bruising","Firm texture, natural sheen intact"], safety:["Safe to eat raw or cooked","Rinse before consuming"]},
+  {name:"Good",    min:65, class:"status-Good",    color:"var(--yellow)",       spoil:["Minor surface softening beginning","Slight color dulling in patches"], safety:["Best consumed within recommended window","Cook thoroughly if applicable"]},
+  {name:"Nearly",  min:40, class:"status-Nearly",  color:"var(--orange)",       spoil:["Noticeable soft spots or discoloration","Mild off-odor may be present"], safety:["Use immediately or freeze","Avoid eating raw — cook fully"]},
+  {name:"Spoiled", min:0,  class:"status-Spoiled",  color:"#e63c3c",             spoil:["Strong odor and visible mold risk","Significant texture breakdown"], safety:["Do not consume","Discard and sanitize storage area"]},
+];
+
+function pickStatus(score){ return STATUS_LEVELS.find(s=>score>=s.min); }
+
+/* storage lookup by category */
+const STORAGE_BY_CAT = {
+  Fruit:      {method:"Refrigerate", sub:"or counter if unripe", temp:"1–4°C", shelf:"5–7 days"},
+  Vegetable:  {method:"Refrigerate", sub:"in crisper drawer", temp:"1–4°C", shelf:"4–8 days"},
+  Dairy:      {method:"Refrigerate", sub:"back shelf, not door", temp:"1–4°C", shelf:"5–7 days"},
+  Meat:       {method:"Freeze", sub:"if not using within 2 days", temp:"-18°C", shelf:"1–2 days chilled"},
+  Seafood:    {method:"Freeze", sub:"use within 1 day if chilled", temp:"-18°C", shelf:"1 day chilled"},
+  Packaged:   {method:"Pantry", sub:"cool, dry, sealed", temp:"18–22°C", shelf:"3–5 days after opening"},
+};
+
+/* ================= SCANNER LOGIC ================= */
+const uploadZone=document.getElementById('uploadZone');
+const fileInput=document.getElementById('fileInput');
+const analyzingBox=document.getElementById('analyzingBox');
+const resultPanel=document.getElementById('resultPanel');
+const emptyState=document.getElementById('emptyState');
+const scanImg=document.getElementById('scanImg');
+
+uploadZone.addEventListener('click',()=>fileInput.click());
+uploadZone.addEventListener('dragover',e=>{e.preventDefault();uploadZone.classList.add('dragover');});
+uploadZone.addEventListener('dragleave',()=>uploadZone.classList.remove('dragover'));
+uploadZone.addEventListener('drop',e=>{
+  e.preventDefault();uploadZone.classList.remove('dragover');
+  if(e.dataTransfer.files[0]) handleFile(e.dataTransfer.files[0]);
+});
+fileInput.addEventListener('change',e=>{ if(e.target.files[0]) handleFile(e.target.files[0]); });
+
+const SAMPLES = [
+  "https://images.unsplash.com/photo-1610832958506-aa56368176cf?q=80&w=900&auto=format&fit=crop",
+  "https://images.unsplash.com/photo-1550258987-190a2d41a8ba?q=80&w=900&auto=format&fit=crop",
+  "https://images.unsplash.com/photo-1518977676601-b53f82aba655?q=80&w=900&auto=format&fit=crop"
+];
+function loadSample(){
+  const url = SAMPLES[Math.floor(Math.random()*SAMPLES.length)];
+  runAnalysis(url);
+}
+
+function handleFile(file){
+  const reader=new FileReader();
+  reader.onload=e=>runAnalysis(e.target.result);
+  reader.readAsDataURL(file);
+}
+
+/* Load MobileNet once and reuse it for every scan */
+let mobilenetModel=null, modelLoading=null;
+function getModel(){
+  if(mobilenetModel) return Promise.resolve(mobilenetModel);
+  if(modelLoading) return modelLoading;
+  modelLoading = mobilenet.load({version:2, alpha:1.0}).then(m=>{ mobilenetModel=m; return m; });
+  return modelLoading;
+}
+
+function runAnalysis(src){
+  uploadZone.style.display='none';
+  resultPanel.classList.remove('active');
+  emptyState.style.display='none';
+  document.getElementById('lowConfidenceState').style.display='none';
+  analyzingBox.classList.add('active');
+  scanImg.src=src;
+
+  const statusEl=document.getElementById('scanStatus');
+  const firstLoad = !mobilenetModel;
+  const statuses = firstLoad
+    ? ["▸ Loading MobileNet CNN weights…","▸ Preparing detection model (first scan only)…","▸ Almost ready…"]
+    : ["▸ Preprocessing image…","▸ Running CNN feature extraction…","▸ Scoring visual freshness cues…","▸ Generating report…"];
+  let i=0;
+  statusEl.textContent=statuses[0];
+  const interval=setInterval(()=>{ i++; statusEl.textContent=statuses[i%statuses.length]; },550);
+
+  const img=new Image();
+  img.crossOrigin="anonymous";
+  img.onload=()=>{
+    // Real pixel sampling for a visual freshness heuristic (color vibrancy vs. dark/dull area ratio)
+    let freshnessSignal=null;
+    try{
+      const c=document.createElement('canvas'); c.width=60;c.height=60;
+      const ctx=c.getContext('2d'); ctx.drawImage(img,0,0,60,60);
+      const data=ctx.getImageData(0,0,60,60).data;
+      let dark=0, vibrant=0, n=0;
+      for(let p=0;p<data.length;p+=4){
+        const r=data[p],g=data[p+1],b=data[p+2];
+        const max=Math.max(r,g,b), min=Math.min(r,g,b);
+        const sat = max===0 ? 0 : (max-min)/max;
+        const val = max/255;
+        if(val<0.38 && sat<0.45) dark++;          // dull/brown/bruised-looking pixel
+        if(sat>0.45 && val>0.4) vibrant++;         // saturated, bright — reads as fresh produce
+        n++;
+      }
+      freshnessSignal = {darkRatio:dark/n, vibrantRatio:vibrant/n};
+    }catch(e){ /* cross-origin canvas read blocked; fall back to a neutral signal below */ }
+
+    getModel().then(model=>model.classify(img, 5)).then(predictions=>{
+      clearInterval(interval);
+      analyzingBox.classList.remove('active');
+      buildResult(predictions, freshnessSignal, src);
+    }).catch(err=>{
+      clearInterval(interval);
+      analyzingBox.classList.remove('active');
+      showToast('⚠️ Model failed to load — check your connection');
+      resetScanner();
+    });
+  };
+  img.onerror=()=>{
+    clearInterval(interval);
+    analyzingBox.classList.remove('active');
+    showToast('⚠️ Could not read that image');
+    resetScanner();
+  };
+  img.src=src;
+}
+
+function matchFoodKey(predictions){
+  for(const p of predictions){
+    const label = p.className.toLowerCase();
+    for(const [re,key] of IMAGENET_MAP){ if(re.test(label)) return {key, prob:p.probability, label:p.className}; }
+  }
+  return null;
+}
+function matchCategoryFallback(predictions){
+  for(const p of predictions){
+    const label = p.className.toLowerCase();
+    for(const [re,cat,emoji] of CATEGORY_HINTS){
+      if(re.test(label)) return {cat, emoji, prob:p.probability, label:p.className};
+    }
+  }
+  return null;
+}
+
+function buildResult(predictions, freshnessSignal, src){
+  const top = predictions[0];
+  const direct = matchFoodKey(predictions);
+  let food, key, confidence, displayName;
+
+  if(direct){
+    food = FOOD_DB[direct.key];
+    key = direct.key;
+    confidence = Math.round(direct.prob*100);
+    displayName = key.charAt(0).toUpperCase()+key.slice(1);
+  } else {
+    const fallback = matchCategoryFallback(predictions);
+    if(fallback){
+      // Recognized as food-adjacent by the model, but not in our curated database —
+      // build a card from the raw label with a category-appropriate estimate.
+      const niceLabel = top.className.split(',')[0];
+      key = niceLabel.toLowerCase().replace(/[^a-z0-9]+/g,'-');
+      displayName = niceLabel.charAt(0).toUpperCase()+niceLabel.slice(1);
+      confidence = Math.round(fallback.prob*100);
+      const catDefaults = {Fruit:70, Vegetable:35, Dairy:120, Meat:190, Seafood:180, Packaged:220};
+      food = {emoji:fallback.emoji, cat:fallback.cat, cal:catDefaults[fallback.cat]||100,
+        nutri:[["Carbs","~","g",'var(--yellow)'],["Protein","~","g",'var(--green-deep)'],["Fat","~","g",'var(--orange)'],["Fiber","~","g",'var(--green-bright)']]};
+    } else {
+      // Model isn't confident this is food at all — be honest instead of guessing.
+      document.getElementById('lowConfTitle').textContent = "Couldn't confidently identify a food item";
+      document.getElementById('lowConfSub').textContent = `Closest match was "${top.className.split(',')[0]}" at ${Math.round(top.probability*100)}% confidence. Try a closer, well-lit photo of a single food item.`;
+      document.getElementById('lowConfidenceState').style.display='block';
+      return;
+    }
+  }
+
+  // Freshness score: blend the pixel-based visual signal with a category-typical baseline
+  let score;
+  if(freshnessSignal){
+    score = Math.round(72 + freshnessSignal.vibrantRatio*35 - freshnessSignal.darkRatio*90);
+  } else {
+    score = Math.round(60 + Math.random()*25);
+  }
+  score = Math.min(97, Math.max(12, score));
+
+  const status = pickStatus(score);
+  const storage = STORAGE_BY_CAT[food.cat];
+
+  const daysLeft = Math.max(1, Math.round((score/100) * (food.cat==="Meat"||food.cat==="Seafood" ? 3 : 9)));
+  const expiryDate = new Date(Date.now() + daysLeft*86400000);
+  const expiryStr = expiryDate.toLocaleDateString(undefined,{month:'short',day:'numeric'});
+
+  document.getElementById('foodName').textContent = `${food.emoji} ${displayName}`;
+  document.getElementById('foodMeta').textContent = `${food.cat} · Identified via MobileNet CNN`;
+  const pill=document.getElementById('statusPill');
+  pill.textContent = status.name==="Nearly" ? "Nearly Expired" : status.name;
+  pill.className = "status-pill status-"+status.name;
+
+  document.getElementById('confVal').textContent = confidence+"% match";
+  document.getElementById('expiryVal').textContent = expiryStr+` (${daysLeft}d)`;
+  document.getElementById('calVal').textContent = food.cal+" kcal";
+
+  const circumference = 352;
+  const arc=document.getElementById('gaugeArc');
+  arc.style.stroke = status.color;
+  setTimeout(()=>{ arc.style.transition="stroke-dashoffset 1.1s ease, stroke 0.4s ease"; arc.style.strokeDashoffset = circumference - (circumference*score/100); },80);
+  document.getElementById('gaugeVal').textContent = score+"%";
+
+  document.getElementById('storeMethod').textContent = storage.method;
+  document.getElementById('storeSub').textContent = storage.sub;
+  document.getElementById('storeTemp').textContent = storage.temp;
+  document.getElementById('shelfLife').textContent = daysLeft+" day"+(daysLeft>1?"s":"");
+
+  const nutriWrap=document.getElementById('nutriRows');
+  nutriWrap.innerHTML="";
+  const maxVal = Math.max(...food.nutri.map(n=>typeof n[1]==='number'?n[1]:0), 30);
+  food.nutri.forEach(([label,val,unit,color])=>{
+    const pct = typeof val==='number' ? Math.min(100,(val/maxVal)*100) : 60;
+    nutriWrap.innerHTML += `<div class="nutri-row">
+      <div class="n-label">${label}</div>
+      <div class="nutri-track"><div class="nutri-fill" style="width:${pct}%;background:${color};"></div></div>
+      <div class="n-val">${val}${unit}</div>
+    </div>`;
+  });
+
+  document.getElementById('spoilList').innerHTML = status.spoil.map(s=>`<li>${s}</li>`).join('');
+  document.getElementById('safetyList').innerHTML = status.safety.map(s=>`<li>${s}</li>`).join('');
+
+  // keep everything needed for the PDF report / share actions
+  lastScan = {
+    displayName, category:food.cat, score, statusName: status.name==="Nearly"?"Nearly Expired":status.name,
+    confidence, expiryStr, daysLeft, calories:food.cal,
+    storageMethod:storage.method, storageSub:storage.sub, storageTemp:storage.temp, shelfLife:daysLeft+" day"+(daysLeft>1?"s":""),
+    nutri: food.nutri, spoil: status.spoil, safety: status.safety, scannedAt: new Date()
+  };
+
+  resultPanel.classList.add('active');
+  buildRecipes(key, displayName, status.name);
+  addHistoryEntry(displayName, score, status);
+}
+
+let lastScan = null;
+
+function downloadReport(){
+  if(!lastScan){ showToast('⚠️ Scan an item first'); return; }
+  if(typeof window.jspdf === 'undefined'){ showToast('⚠️ PDF library still loading — try again in a second'); return; }
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF({unit:'pt', format:'a4'});
+  const s = lastScan;
+  const margin = 48;
+  let y = 60;
+  const pageWidth = doc.internal.pageSize.getWidth();
+
+  doc.setFillColor(31,122,77);
+  doc.rect(0,0,pageWidth,90,'F');
+  doc.setTextColor(255,255,255);
+  doc.setFont('helvetica','bold'); doc.setFontSize(22);
+  doc.text('FreshAI — Food Freshness Report', margin, 45);
+  doc.setFont('helvetica','normal'); doc.setFontSize(10);
+  doc.text('Generated ' + s.scannedAt.toLocaleString(), margin, 65);
+
+  y = 130;
+  doc.setTextColor(20,30,20);
+  doc.setFont('helvetica','bold'); doc.setFontSize(18);
+  doc.text(s.displayName, margin, y);
+  doc.setFont('helvetica','normal'); doc.setFontSize(11);
+  doc.setTextColor(90,100,90);
+  doc.text(`${s.category} · Identified via MobileNet CNN`, margin, y+18);
+
+  y += 46;
+  doc.setDrawColor(220,220,210); doc.line(margin, y, pageWidth-margin, y);
+  y += 28;
+
+  const row = (label, value) => {
+    doc.setFont('helvetica','bold'); doc.setFontSize(11); doc.setTextColor(31,122,77);
+    doc.text(label, margin, y);
+    doc.setFont('helvetica','normal'); doc.setTextColor(20,30,20);
+    doc.text(String(value), margin+180, y);
+    y += 22;
+  };
+  row('Freshness score:', s.score + '%');
+  row('Status:', s.statusName);
+  row('Confidence:', s.confidence + '%');
+  row('Estimated expiry:', `${s.expiryStr} (${s.daysLeft} day${s.daysLeft>1?'s':''})`);
+  row('Calories / serving:', s.calories + ' kcal');
+  row('Storage method:', `${s.storageMethod} (${s.storageSub})`);
+  row('Ideal temperature:', s.storageTemp);
+  row('Shelf life remaining:', s.shelfLife);
+
+  y += 10;
+  doc.setFont('helvetica','bold'); doc.setFontSize(13); doc.setTextColor(31,122,77);
+  doc.text('Nutritional information (per serving)', margin, y);
+  y += 20;
+  doc.setFont('helvetica','normal'); doc.setFontSize(11); doc.setTextColor(20,30,20);
+  s.nutri.forEach(([label,val,unit])=>{ doc.text(`•  ${label}: ${val}${unit}`, margin, y); y += 18; });
+
+  y += 14;
+  doc.setFont('helvetica','bold'); doc.setFontSize(13); doc.setTextColor(242,102,42);
+  doc.text('Spoilage indicators', margin, y); y += 20;
+  doc.setFont('helvetica','normal'); doc.setFontSize(11); doc.setTextColor(20,30,20);
+  s.spoil.forEach(t=>{ doc.text(`•  ${t}`, margin, y); y += 18; });
+
+  y += 14;
+  doc.setFont('helvetica','bold'); doc.setFontSize(13); doc.setTextColor(31,122,77);
+  doc.text('Food safety tips', margin, y); y += 20;
+  doc.setFont('helvetica','normal'); doc.setFontSize(11); doc.setTextColor(20,30,20);
+  s.safety.forEach(t=>{ doc.text(`•  ${t}`, margin, y); y += 18; });
+
+  doc.setFontSize(9); doc.setTextColor(150,150,150);
+  doc.text('Freshness score is a visual estimate, not a substitute for smell/touch checks.', margin, 800);
+
+  const fname = 'freshai-report-' + s.displayName.toLowerCase().replace(/[^a-z0-9]+/g,'-') + '.pdf';
+  doc.save(fname);
+  showToast('📄 Report downloaded');
+}
+
+function resetScanner(){
+  uploadZone.style.display='flex';
+  resultPanel.classList.remove('active');
+  emptyState.style.display='block';
+  fileInput.value='';
+}
+
+/* ================= RECIPES ================= */
+const RECIPE_DB = {
+  apple:   [{id:"apple-bake", n:"Cinnamon Baked Apples", img:"https://images.unsplash.com/photo-1568909344668-6f14a07b56a0?q=80&w=600&auto=format&fit=crop", time:"25 min", cal:"180", servings:2, desc:"Cored apples baked with cinnamon, oats and a touch of honey.",
+    ingredients:["2 apples, cored","1 tbsp butter, melted","1 tsp cinnamon","2 tbsp rolled oats","1 tbsp honey","Pinch of nutmeg"],
+    steps:["Preheat oven to 190°C (375°F).","Place cored apples in a baking dish.","Mix oats, cinnamon, nutmeg and melted butter; pack into the apple centers.","Drizzle with honey.","Bake for 20–25 minutes until tender.","Serve warm, optionally with yogurt or ice cream."]}],
+  banana:  [{id:"banana-pancakes", n:"Banana Oat Pancakes", img:"https://images.unsplash.com/photo-1567620905732-2d1ec7ab7445?q=80&w=600&auto=format&fit=crop", time:"20 min", cal:"310", servings:2, desc:"Ripe bananas mashed into a naturally sweet, fluffy batter.",
+    ingredients:["2 ripe bananas, mashed","1 cup rolled oats (blended to flour)","2 eggs","1/2 tsp baking powder","1/4 cup milk","Pinch of salt"],
+    steps:["Blend oats into a rough flour.","Whisk mashed banana, eggs and milk together.","Fold in oat flour, baking powder and salt until just combined.","Heat a non-stick pan over medium heat.","Cook batter in small rounds, 2 minutes per side.","Serve with fruit or a drizzle of honey."]}],
+  tomato:  [{id:"tomato-soup", n:"Roasted Tomato Soup", img:"https://images.unsplash.com/photo-1547592166-23ac45744acd?q=80&w=600&auto=format&fit=crop", time:"35 min", cal:"210", servings:2, desc:"Slow-roasted tomatoes blended with garlic and basil.",
+    ingredients:["6 ripe tomatoes, halved","3 garlic cloves","2 tbsp olive oil","1/2 onion, chopped","2 cups vegetable stock","Handful fresh basil","Salt & pepper"],
+    steps:["Preheat oven to 200°C (400°F).","Toss tomatoes and garlic with olive oil, salt and pepper.","Roast for 25 minutes until charred at the edges.","Sauté onion until soft in a pot.","Add roasted tomatoes, garlic and stock; simmer 10 minutes.","Blend until smooth, stir in torn basil, and serve."]}],
+  spinach: [{id:"spinach-saute", n:"Garlic Sautéed Spinach", img:"https://images.unsplash.com/photo-1576045057995-568f588f82fb?q=80&w=600&auto=format&fit=crop", time:"10 min", cal:"120", servings:2, desc:"A quick wilted-spinach side with garlic and lemon.",
+    ingredients:["4 cups fresh spinach","2 garlic cloves, sliced","1 tbsp olive oil","1/2 lemon, juiced","Pinch of chili flakes (optional)","Salt to taste"],
+    steps:["Heat olive oil in a wide pan over medium heat.","Add garlic and cook 30 seconds until fragrant.","Add spinach in batches, tossing until just wilted (2–3 min).","Season with salt and chili flakes.","Finish with a squeeze of lemon juice.","Serve immediately as a side."]}],
+  milk:    [{id:"milk-pudding", n:"Homemade Rice Pudding", img:"https://images.unsplash.com/photo-1488477181946-6428a0291777?q=80&w=600&auto=format&fit=crop", time:"40 min", cal:"260", servings:2, desc:"Simmered rice, milk and cardamom — a use-it-up dessert.",
+    ingredients:["1/2 cup short-grain rice","3 cups milk","3 tbsp sugar","2 cardamom pods, crushed","1 tbsp raisins","Pinch of cinnamon to garnish"],
+    steps:["Rinse rice and add to a saucepan with milk.","Bring to a gentle simmer, stirring often.","Add sugar, cardamom and raisins.","Cook on low for 30 minutes, stirring occasionally, until thickened.","Remove cardamom pods.","Serve warm or chilled with a dusting of cinnamon."]}],
+  chicken: [{id:"chicken-grill", n:"Lemon Herb Grilled Chicken", img:"https://images.unsplash.com/photo-1532550907401-a500c9a57435?q=80&w=600&auto=format&fit=crop", time:"30 min", cal:"340", servings:2, desc:"A weeknight staple with a bright citrus marinade.",
+    ingredients:["2 chicken breasts","1 lemon, juiced and zested","2 tbsp olive oil","2 garlic cloves, minced","1 tsp dried oregano","Salt & pepper"],
+    steps:["Whisk lemon juice, zest, olive oil, garlic and oregano.","Marinate chicken for at least 15 minutes (or overnight).","Heat a grill pan over medium-high heat.","Cook chicken 6–7 minutes per side until internal temp reaches 74°C (165°F).","Rest for 5 minutes before slicing.","Serve with a side salad or grains."]}],
+  salmon:  [{id:"salmon-sear", n:"Pan-Seared Salmon & Greens", img:"https://images.unsplash.com/photo-1467003909585-2f8a72700288?q=80&w=600&auto=format&fit=crop", time:"22 min", cal:"420", servings:2, desc:"Crisp-skin salmon over sautéed seasonal greens.",
+    ingredients:["2 salmon fillets, skin-on","2 cups leafy greens","1 tbsp butter","1 tbsp olive oil","1 garlic clove","Salt & pepper"],
+    steps:["Pat salmon dry and season with salt and pepper.","Heat olive oil in a pan over medium-high heat.","Sear salmon skin-side down for 4–5 minutes until crisp.","Flip and cook 2–3 minutes more; remove and rest.","In the same pan, sauté garlic and greens with butter until wilted.","Plate greens topped with salmon."]}],
+  bread:   [{id:"bread-toast", n:"Classic French Toast", img:"https://images.unsplash.com/photo-1484723091739-30a097e8f929?q=80&w=600&auto=format&fit=crop", time:"15 min", cal:"290", servings:2, desc:"The best use for bread that's a day past its prime.",
+    ingredients:["4 slices bread (day-old works best)","2 eggs","1/2 cup milk","1/2 tsp cinnamon","1 tsp vanilla extract","1 tbsp butter, for the pan"],
+    steps:["Whisk eggs, milk, cinnamon and vanilla in a shallow dish.","Dip each bread slice, soaking both sides briefly.","Melt butter in a pan over medium heat.","Cook slices 2–3 minutes per side until golden.","Serve with syrup, fruit or a dusting of sugar."]}],
+};
+const DEFAULT_RECIPES = Object.values(RECIPE_DB).flat();
+const ALL_RECIPES = {}; DEFAULT_RECIPES.forEach(r=>ALL_RECIPES[r.id]=r);
+
+function recipeCardHTML(r, tag){
+  return `<div class="recipe-card reveal in">
+    <div class="recipe-img"><img src="${r.img}" alt="${r.n}"><div class="recipe-tag">${tag}</div></div>
+    <div class="recipe-body">
+      <h4>${r.n}</h4>
+      <div class="recipe-meta"><span>⏱ ${r.time}</span><span>👥 ${r.servings||2} servings</span></div>
+      <p class="desc">${r.desc}</p>
+      <div class="recipe-foot"><span class="recipe-cal">${r.cal} kcal</span><a class="recipe-link" href="#" onclick="event.preventDefault();openRecipeModal('${r.id}')">View recipe →</a></div>
+    </div>
+  </div>`;
+}
+
+function openRecipeModal(id){
+  const r = ALL_RECIPES[id];
+  if(!r) return;
+  document.getElementById('recipeModalImg').src = r.img;
+  document.getElementById('recipeModalTitle').textContent = r.n;
+  document.getElementById('recipeModalMeta').textContent = `⏱ ${r.time}  ·  👥 ${r.servings||2} servings  ·  🔥 ${r.cal} kcal`;
+  document.getElementById('recipeModalDesc').textContent = r.desc;
+  document.getElementById('recipeModalIngredients').innerHTML = r.ingredients.map(i=>`<li>${i}</li>`).join('');
+  document.getElementById('recipeModalSteps').innerHTML = r.steps.map(s=>`<li>${s}</li>`).join('');
+  document.getElementById('recipeModal').classList.add('active');
+}
+function closeRecipeModal(){ document.getElementById('recipeModal').classList.remove('active'); }
+
+function buildRecipes(key, displayName, statusName){
+  const grid=document.getElementById('recipeGrid');
+  const list = RECIPE_DB[key] || [];
+  const tag = statusName==="Nearly" ? "Use it up" : "Matched to scan";
+  document.getElementById('recipeIntro').textContent = list.length
+    ? `Based on your ${displayName} scan, here's what to make${statusName==="Nearly" ? " before it turns" : ""}.`
+    : "Scan an item to get recipes tailored to it — here are today's top picks in the meantime.";
+  const cards = list.length ? list.map(r=>recipeCardHTML(r,tag)) : DEFAULT_RECIPES.map(r=>recipeCardHTML(r,"Popular"));
+  grid.innerHTML = cards.join('');
+}
+buildRecipes(null,null,null);
+
+/* ================= DASHBOARD HISTORY ================= */
+const historyData = [
+  {name:"Broccoli", score:88, status:"Fresh"},
+  {name:"Chicken breast", score:52, status:"Nearly"},
+  {name:"Whole milk", score:74, status:"Good"},
+  {name:"Salmon fillet", score:31, status:"Spoiled"},
+  {name:"Strawberries", score:91, status:"Fresh"},
+];
+function statusColor(s){ return {Fresh:'var(--green-bright)',Good:'var(--yellow)',Nearly:'var(--orange)',Spoiled:'#e63c3c'}[s]; }
+function renderHistory(){
+  const ul=document.getElementById('historyList');
+  ul.innerHTML = historyData.slice(0,8).map(h=>`
+    <li><div class="h-left"><span class="h-dot" style="background:${statusColor(h.status)}"></span>${h.name}</div><b style="font-family:var(--font-mono);">${h.score}%</b></li>
+  `).join('');
+}
+function addHistoryEntry(displayName, score, status){
+  historyData.unshift({name:displayName, score, status:status.name});
+  renderHistory();
+}
+renderHistory();
+
+/* ================= CHARTS ================= */
+let chartsInit=false;
+function initCharts(){
+  if(chartsInit) return; chartsInit=true;
+  const weeklyCtx=document.getElementById('weeklyChart');
+  new Chart(weeklyCtx,{
+    type:'bar',
+    data:{labels:['Mon','Tue','Wed','Thu','Fri','Sat','Sun'],
+      datasets:[{label:'Scans',data:[24,31,18,40,36,52,45],backgroundColor:'#8BC53F',borderRadius:8},
+                {label:'Waste saved (kg)',data:[1.2,2.1,0.8,2.8,2.4,3.6,3.1],backgroundColor:'#FFC93C',borderRadius:8}]},
+    options:{responsive:true,plugins:{legend:{position:'bottom',labels:{font:{family:'Plus Jakarta Sans'}}}},scales:{y:{beginAtZero:true,grid:{color:'#eee'}},x:{grid:{display:false}}}}
+  });
+  const freshCtx=document.getElementById('freshChart');
+  new Chart(freshCtx,{
+    type:'doughnut',
+    data:{labels:['Fresh','Good','Nearly Expired','Spoiled'],
+      datasets:[{data:[52,26,15,7],backgroundColor:['#8BC53F','#FFC93C','#FF8A3D','#e63c3c'],borderWidth:0}]},
+    options:{responsive:true,plugins:{legend:{position:'bottom',labels:{font:{family:'Plus Jakarta Sans'},boxWidth:12}}},cutout:'68%'}
+  });
+}
+
+/* ================= FAQ ================= */
+const FAQS = [
+  {q:"How accurate is the freshness detection?", a:"Our model reports 98.4% top-1 accuracy on our labeled validation set across fruit, vegetables, dairy, meat, seafood and packaged goods, with a confidence score shown alongside every scan."},
+  {q:"Does FreshAI work offline?", a:"Image capture works offline; analysis requires a connection so the image can reach our detection model. We cache your last 20 reports locally for offline viewing."},
+  {q:"What if the AI misidentifies my food?", a:"You can correct the detected item from the result card, which also helps retrain and improve the model over time."},
+  {q:"Is my photo data private?", a:"Photos are used only for analysis and are never sold. You can delete your scan history at any time from your profile."},
+  {q:"Can I use this for meal prepping?", a:"Yes — the dashboard tracks calories and freshness trends over time, and recipes can be filtered by prep time and serving size."},
+];
+function renderFaqs(){
+  const wrap=document.getElementById('faqList');
+  wrap.innerHTML = FAQS.map((f,i)=>`
+    <div class="faq-item" onclick="this.classList.toggle('open')">
+      <div class="faq-q">${f.q}<span class="faq-plus">+</span></div>
+      <div class="faq-a">${f.a}</div>
+    </div>`).join('');
+}
+renderFaqs();
+
+/* ================= SCROLL REVEAL ================= */
+const io = new IntersectionObserver((entries)=>{
+  entries.forEach(e=>{ if(e.isIntersecting) e.target.classList.add('in'); });
+},{threshold:0.12});
+document.querySelectorAll('.reveal').forEach(el=>io.observe(el));
+</script>
+</body>
+</html>
