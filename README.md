@@ -62,18 +62,7 @@ Pick whichever is easiest for you:
 
 **Option 1 — Just open the file**
 ```bash
-open freshai-website.html        # macOS
 start freshai-website.html       # Windows
-xdg-open freshai-website.html    # Linux
-```
-
-**Option 2 — Serve it locally (recommended, avoids browser file:// restrictions)**
-```bash
-# Python 3
-python3 -m http.server 8000
-
-# or Node.js
-npx serve .
 ```
 
 ## 🌐 Open in Browser
@@ -81,7 +70,7 @@ npx serve .
 Once served locally, open:
 
 ```
-http://localhost:8000/freshai-website.html
+http://127.0.0.1:5500/index.html
 ```
 
 ---
