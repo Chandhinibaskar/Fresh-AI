@@ -56,14 +56,6 @@
 - No Node.js, build tools, or package installation required — this is a single static HTML file
 - An internet connection on first load (to fetch TensorFlow.js, MobileNet, Chart.js, and jsPDF from their CDNs)
 
-### Clone the repo
-```bash
-git clone https://github.com/<your-username>/freshai.git
-cd freshai
-```
-
----
-
 ## ▶️ Run the App
 
 Pick whichever is easiest for you:
@@ -95,14 +87,7 @@ http://localhost:8000/freshai-website.html
 ---
 
 ## 🔗 App Link
-
-> 🔧 **Add your deployed link here** once published, e.g. via GitHub Pages, Netlify, or Vercel:
->
-> **Live demo:** `https://<your-username>.github.io/freshai/freshai-website.html`
-
-To deploy on GitHub Pages: `Settings → Pages → Deploy from branch → main / root`.
-
----
+> Live demo: `freshaiwebsite.netlify.app`
 
 ## 📁 Project Structure
 
